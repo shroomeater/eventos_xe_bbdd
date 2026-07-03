@@ -1,5 +1,14 @@
 "use strict";
 
+/* =====================================================================
+   MODO DEMOSTRACIÓN
+   Esta copia de app.js está pensada só para GitHub Pages: non hai
+   backend real detrás, así que todas as chamadas á API se substitúen
+   por datos de proba fixos definidos máis abaixo. A lóxica de
+   renderizado (Kanban, Táboa, ficha de expediente) é idéntica á da
+   aplicación real.
+   ===================================================================== */
+
 /* ---------- Constantes compartidas ---------- */
 
 const FASES = [
@@ -32,56 +41,203 @@ function etiquetaDocumentacion(valor) {
   return doc ? doc.etiqueta : valor;
 }
 
-/* ---------- Autenticación / peticións á API ---------- */
+/* ---------- Datos de proba ---------- */
 
-function getToken() {
-  return sessionStorage.getItem("token");
+function dataDemo(diasDesdeHoxe) {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + diasDesdeHoxe);
+  return d.toISOString().slice(0, 10);
 }
 
-function setToken(token) {
-  sessionStorage.setItem("token", token);
+function dataHoraDemo(diasDesdeHoxe) {
+  const d = new Date();
+  d.setDate(d.getDate() + diasDesdeHoxe);
+  return d.toISOString();
 }
 
-function clearToken() {
-  sessionStorage.removeItem("token");
-}
+const USUARIOS_DEMO = [
+  { id: 1, nombre: "Ana Administrativa", email: "ana@vigo.gal", rol: "administrativo", juridico_defecto: false, activo: true },
+  { id: 2, nombre: "Tomás Técnico", email: "tomas@vigo.gal", rol: "tecnico", juridico_defecto: false, activo: true },
+  { id: 3, nombre: "Xela Louzao", email: "xela@vigo.gal", rol: "juridico", juridico_defecto: true, activo: true },
+];
 
-function requireAuth() {
-  if (!getToken()) {
-    window.location.href = "index.html";
-  }
+const EXPEDIENTES_DEMO = [
+  {
+    id: 1, numero_orden: 101, dias: 12, expediente: "EXP/2026/101",
+    interesado: "Asociación Festas do Barrio", asunto: "Verbena popular con carpa e escenario musical",
+    ubicacion: "Praza de España", situacion_abierto: true, fecha_expediente: dataDemo(-20),
+    estado_origen: "En trámite", fase: "Sin revisar", documentacion_pendiente: "No procede",
+    fecha_inicio_evento: null, fecha_fin_evento: null,
+    tecnico_asignado_id: null, juridico_asignado_id: 3,
+    fecha_creacion: dataHoraDemo(-6), fecha_actualizacion: dataHoraDemo(-6), incompleto: true,
+  },
+  {
+    id: 2, numero_orden: 102, dias: 8, expediente: "EXP/2026/102",
+    interesado: "Peña Recreativa O Castro", asunto: "Concerto de verán na alameda",
+    ubicacion: "Alameda", situacion_abierto: true, fecha_expediente: dataDemo(-15),
+    estado_origen: "En trámite", fase: "Sin revisar", documentacion_pendiente: "Requerida documentacion administrativa",
+    fecha_inicio_evento: dataDemo(5), fecha_fin_evento: dataDemo(5),
+    tecnico_asignado_id: 2, juridico_asignado_id: 3,
+    fecha_creacion: dataHoraDemo(-4), fecha_actualizacion: dataHoraDemo(-1), incompleto: false,
+  },
+  {
+    id: 3, numero_orden: 103, dias: 6, expediente: "EXP/2026/103",
+    interesado: "Concello de Vigo — Cultura", asunto: "Feira medieval no centro histórico",
+    ubicacion: "Casco Vello", situacion_abierto: true, fecha_expediente: dataDemo(-10),
+    estado_origen: "Pendente", fase: "Revisado administrativamente", documentacion_pendiente: "No procede",
+    fecha_inicio_evento: dataDemo(12), fecha_fin_evento: dataDemo(14),
+    tecnico_asignado_id: 2, juridico_asignado_id: null,
+    fecha_creacion: dataHoraDemo(-9), fecha_actualizacion: dataHoraDemo(-2), incompleto: false,
+  },
+  {
+    id: 4, numero_orden: 104, dias: 3, expediente: "EXP/2026/104",
+    interesado: "Comunidade de Montes de Bembrive", asunto: "Festa da malla con exhibición de gando",
+    ubicacion: "Bembrive", situacion_abierto: true, fecha_expediente: dataDemo(-5),
+    estado_origen: "En trámite", fase: "Pendiente revision tecnica", documentacion_pendiente: "Requerida documentacion tecnica",
+    fecha_inicio_evento: dataDemo(25), fecha_fin_evento: dataDemo(26),
+    tecnico_asignado_id: 2, juridico_asignado_id: 3,
+    fecha_creacion: dataHoraDemo(-3), fecha_actualizacion: dataHoraDemo(-1), incompleto: false,
+  },
+  {
+    id: 5, numero_orden: 105, dias: 15, expediente: "EXP/2026/105",
+    interesado: "Hostalaría Vigo Centro", asunto: "Mercado gastronómico de rúa",
+    ubicacion: "Rúa Príncipe", situacion_abierto: true, fecha_expediente: dataDemo(-25),
+    estado_origen: "Favorable", fase: "Revision tecnica favorable", documentacion_pendiente: "No procede",
+    fecha_inicio_evento: dataDemo(2), fecha_fin_evento: dataDemo(3),
+    tecnico_asignado_id: 2, juridico_asignado_id: 3,
+    fecha_creacion: dataHoraDemo(-15), fecha_actualizacion: dataHoraDemo(-1), incompleto: false,
+  },
+  {
+    id: 6, numero_orden: 106, dias: 1, expediente: "EXP/2026/106",
+    interesado: "Club Deportivo Coia", asunto: "Torneo popular de fútbol na rúa",
+    ubicacion: "Coia", situacion_abierto: true, fecha_expediente: dataDemo(-2),
+    estado_origen: "En trámite", fase: "Pendiente revision juridica", documentacion_pendiente: "Documentacion recibida pendiente revisar",
+    fecha_inicio_evento: null, fecha_fin_evento: null,
+    tecnico_asignado_id: 2, juridico_asignado_id: 3,
+    fecha_creacion: dataHoraDemo(-1), fecha_actualizacion: dataHoraDemo(0), incompleto: false,
+  },
+  {
+    id: 7, numero_orden: 107, dias: 30, expediente: "EXP/2026/107",
+    interesado: "Fundación Vigo Cultural", asunto: "Ciclo de música tradicional galega",
+    ubicacion: "Auditorio Municipal", situacion_abierto: true, fecha_expediente: dataDemo(-40),
+    estado_origen: "Favorable", fase: "Revision juridica favorable", documentacion_pendiente: "No procede",
+    fecha_inicio_evento: dataDemo(40), fecha_fin_evento: dataDemo(41),
+    tecnico_asignado_id: 2, juridico_asignado_id: 3,
+    fecha_creacion: dataHoraDemo(-30), fecha_actualizacion: dataHoraDemo(-3), incompleto: false,
+  },
+  {
+    id: 8, numero_orden: 108, dias: 4, expediente: "EXP/2026/108",
+    interesado: "Asociación Veciñal de Teis", asunto: "Festa de fin de curso con atraccións infantís",
+    ubicacion: "Teis", situacion_abierto: true, fecha_expediente: dataDemo(-8),
+    estado_origen: "Favorable", fase: "Preparada resolucion", documentacion_pendiente: "No procede",
+    fecha_inicio_evento: dataDemo(8), fecha_fin_evento: dataDemo(8),
+    tecnico_asignado_id: 2, juridico_asignado_id: 3,
+    fecha_creacion: dataHoraDemo(-8), fecha_actualizacion: dataHoraDemo(-1), incompleto: false,
+  },
+  {
+    id: 9, numero_orden: 109, dias: 45, expediente: "EXP/2026/109",
+    interesado: "Concello de Vigo — Turismo", asunto: "Mostra de artesanía de Nadal",
+    ubicacion: "Praza da Constitución", situacion_abierto: false, fecha_expediente: dataDemo(-60),
+    estado_origen: "Resuelto", fase: "Comunicada", documentacion_pendiente: "No procede",
+    fecha_inicio_evento: dataDemo(-3), fecha_fin_evento: dataDemo(-1),
+    tecnico_asignado_id: 2, juridico_asignado_id: 3,
+    fecha_creacion: dataHoraDemo(-45), fecha_actualizacion: dataHoraDemo(-4), incompleto: false,
+  },
+  {
+    id: 10, numero_orden: 110, dias: 90, expediente: "EXP/2026/110",
+    interesado: "Real Club Celta — Fundación", asunto: "Evento solidario previo ao partido",
+    ubicacion: "Balaídos", situacion_abierto: false, fecha_expediente: dataDemo(-90),
+    estado_origen: "Resuelto", fase: "Expediente cerrado", documentacion_pendiente: "No procede",
+    fecha_inicio_evento: dataDemo(-30), fecha_fin_evento: dataDemo(-29),
+    tecnico_asignado_id: 2, juridico_asignado_id: 3,
+    fecha_creacion: dataHoraDemo(-90), fecha_actualizacion: dataHoraDemo(-28), incompleto: false,
+  },
+];
+
+const HISTORICO_DEMO = {
+  3: [
+    {
+      id: 1, expediente_id: 3, usuario_id: 1,
+      fase_anterior: "Sin revisar", fase_nueva: "Revisado administrativamente",
+      documentacion_anterior: null, documentacion_nueva: null,
+      fecha_cambio: dataHoraDemo(-9), usuario: USUARIOS_DEMO[0],
+    },
+  ],
+  4: [
+    {
+      id: 2, expediente_id: 4, usuario_id: 1,
+      fase_anterior: "Sin revisar", fase_nueva: "Pendiente revision tecnica",
+      documentacion_anterior: "No procede", documentacion_nueva: "Requerida documentacion tecnica",
+      fecha_cambio: dataHoraDemo(-3), usuario: USUARIOS_DEMO[0],
+    },
+    {
+      id: 3, expediente_id: 4, usuario_id: 2,
+      fase_anterior: null, fase_nueva: null,
+      documentacion_anterior: "Requerida documentacion tecnica", documentacion_nueva: "Documentacion recibida pendiente revisar",
+      fecha_cambio: dataHoraDemo(-1), usuario: USUARIOS_DEMO[1],
+    },
+  ],
+};
+
+/* ---------- "API" simulada ---------- */
+
+function agardar(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function apiFetch(ruta, opcions = {}) {
-  const cabeceiras = opcions.cabeceiras || {};
-  const token = getToken();
-  if (token) {
-    cabeceiras["Authorization"] = `Bearer ${token}`;
+  await agardar(120);
+
+  const metodo = (opcions.method || "GET").toUpperCase();
+  const rutaBase = ruta.split("?")[0];
+
+  if (rutaBase === "/auth/me") {
+    return USUARIOS_DEMO[0];
   }
 
-  const resposta = await fetch(ruta, { ...opcions, headers: cabeceiras });
-
-  if (resposta.status === 401) {
-    clearToken();
-    window.location.href = "index.html";
-    throw new Error("Non autorizado");
+  if (rutaBase === "/usuarios") {
+    return USUARIOS_DEMO;
   }
 
-  if (!resposta.ok) {
-    let detalle = "Erro na petición";
-    try {
-      const corpo = await resposta.json();
-      detalle = corpo.detail || detalle;
-    } catch (e) {
-      /* resposta sen corpo JSON */
+  if (rutaBase === "/expedientes") {
+    return EXPEDIENTES_DEMO;
+  }
+
+  if (rutaBase === "/agenda") {
+    const hoxe = new Date();
+    hoxe.setHours(0, 0, 0, 0);
+    return EXPEDIENTES_DEMO.filter((e) => {
+      if (!e.fecha_inicio_evento) return false;
+      return new Date(e.fecha_inicio_evento + "T00:00:00") >= hoxe;
+    }).sort((a, b) => a.fecha_inicio_evento.localeCompare(b.fecha_inicio_evento));
+  }
+
+  const coincidenciaHistorico = rutaBase.match(/^\/expedientes\/(\d+)\/historico$/);
+  if (coincidenciaHistorico) {
+    const id = Number(coincidenciaHistorico[1]);
+    return HISTORICO_DEMO[id] || [];
+  }
+
+  const coincidenciaDetalle = rutaBase.match(/^\/expedientes\/(\d+)$/);
+  if (coincidenciaDetalle) {
+    const id = Number(coincidenciaDetalle[1]);
+    const exp = EXPEDIENTES_DEMO.find((e) => e.id === id);
+    if (!exp) throw new Error("Expediente non atopado");
+
+    if (metodo === "PATCH") {
+      const cambios = JSON.parse(opcions.body || "{}");
+      Object.assign(exp, cambios);
+      exp.tecnico_asignado_id = cambios.tecnico_asignado_id ? Number(cambios.tecnico_asignado_id) : null;
+      exp.juridico_asignado_id = cambios.juridico_asignado_id ? Number(cambios.juridico_asignado_id) : null;
+      exp.incompleto = !(exp.fecha_inicio_evento && exp.fecha_fin_evento);
+      exp.fecha_actualizacion = new Date().toISOString();
     }
-    throw new Error(typeof detalle === "string" ? detalle : JSON.stringify(detalle));
+
+    return exp;
   }
 
-  if (resposta.status === 204) {
-    return null;
-  }
-  return resposta.json();
+  throw new Error("Non dispoñible no modo demostración");
 }
 
 /* ---------- Utilidades ---------- */
@@ -112,7 +268,7 @@ function formatFechaHora(valorIso) {
   return `${dia}/${mes}/${anio} ${horas}:${minutos}`;
 }
 
-// Convirte un texto "dd/mm/yyyy" introducido a man en "yyyy-mm-dd" para a API.
+// Convirte un texto "dd/mm/yyyy" introducido a man en "yyyy-mm-dd".
 // Devolve null se o campo está baleiro, undefined se o formato non é válido.
 function parseFechaInput(texto) {
   if (!texto || !texto.trim()) return null;
@@ -158,6 +314,24 @@ function parametroUrl(nome) {
   return new URLSearchParams(window.location.search).get(nome);
 }
 
+function getToken() {
+  return sessionStorage.getItem("token_demo");
+}
+
+function setToken(token) {
+  sessionStorage.setItem("token_demo", token);
+}
+
+function clearToken() {
+  sessionStorage.removeItem("token_demo");
+}
+
+function requireAuth() {
+  if (!getToken()) {
+    window.location.href = "index.html";
+  }
+}
+
 /* ==================== Páxina: Login ==================== */
 
 function initLogin() {
@@ -167,33 +341,13 @@ function initLogin() {
   }
 
   const form = document.getElementById("form-login");
-  const erro = document.getElementById("error-login");
 
-  form.addEventListener("submit", async (ev) => {
+  form.addEventListener("submit", (ev) => {
     ev.preventDefault();
-    erro.hidden = true;
-
-    const email = document.getElementById("email").value;
-    const password = document.getElementById("password").value;
-
-    try {
-      const resposta = await fetch("/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (!resposta.ok) {
-        throw new Error("Email ou contrasinal incorrectos");
-      }
-
-      const datos = await resposta.json();
-      setToken(datos.access_token);
-      window.location.href = "panel.html";
-    } catch (e) {
-      erro.textContent = e.message;
-      erro.hidden = false;
-    }
+    // No modo demostración calquera credencial é válida: non hai backend
+    // real que verificar.
+    setToken("demo");
+    window.location.href = "panel.html";
   });
 }
 
@@ -224,12 +378,8 @@ async function initPanel() {
     window.location.href = "index.html";
   });
 
-  try {
-    estadoPanel.usuarioActual = await apiFetch("/auth/me");
-    document.getElementById("usuario-actual").textContent = estadoPanel.usuarioActual.nombre;
-  } catch (e) {
-    return;
-  }
+  estadoPanel.usuarioActual = await apiFetch("/auth/me");
+  document.getElementById("usuario-actual").textContent = estadoPanel.usuarioActual.nombre;
 
   const usuarios = await apiFetch("/usuarios");
   usuarios.forEach((u) => {
@@ -539,46 +689,8 @@ function pecharModalImportar() {
 }
 
 async function confirmarImportacion() {
-  const input = document.getElementById("ficheiro-csv");
   const resultado = document.getElementById("resultado-importacion");
-
-  if (!input.files.length) {
-    resultado.textContent = "Selecciona un ficheiro CSV.";
-    return;
-  }
-
-  const formData = new FormData();
-  formData.append("fichero", input.files[0]);
-
-  resultado.textContent = "Importando...";
-
-  try {
-    const resposta = await fetch("/importar-csv", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${getToken()}` },
-      body: formData,
-    });
-
-    if (!resposta.ok) {
-      const corpo = await resposta.json();
-      throw new Error(corpo.detail || "Erro na importación");
-    }
-
-    const resumo = await resposta.json();
-    let html = `<p>Novos: ${resumo.nuevos} · Actualizados: ${resumo.actualizados}</p>`;
-    if (resumo.errores.length) {
-      html += `<p>Erros (${resumo.errores.length}):</p><ul>`;
-      resumo.errores.forEach((err) => {
-        html += `<li>${escapeHtml(err)}</li>`;
-      });
-      html += "</ul>";
-    }
-    resultado.innerHTML = html;
-
-    await cargarExpedientes();
-  } catch (e) {
-    resultado.textContent = e.message;
-  }
+  resultado.textContent = "A importación de CSV non está dispoñible no modo demostración (require backend real).";
 }
 
 /* ==================== Páxina: Ficha de expediente ==================== */
@@ -603,12 +715,8 @@ async function initExpediente() {
     return;
   }
 
-  try {
-    const usuarioActual = await apiFetch("/auth/me");
-    document.getElementById("usuario-actual").textContent = usuarioActual.nombre;
-  } catch (e) {
-    return;
-  }
+  const usuarioActual = await apiFetch("/auth/me");
+  document.getElementById("usuario-actual").textContent = usuarioActual.nombre;
 
   estadoFicha.usuarios = await apiFetch("/usuarios");
   popularSelectorFases();
@@ -668,9 +776,9 @@ async function cargarExpediente() {
   document.getElementById("campo-fase").value = exp.fase;
   document.getElementById("campo-documentacion").value = exp.documentacion_pendiente;
   document.getElementById("campo-fecha-inicio").value =
-    exp.fecha_inicio_evento && exp.fecha_inicio_evento !== "—" ? formatFecha(exp.fecha_inicio_evento) : "";
+    exp.fecha_inicio_evento ? formatFecha(exp.fecha_inicio_evento) : "";
   document.getElementById("campo-fecha-fin").value =
-    exp.fecha_fin_evento && exp.fecha_fin_evento !== "—" ? formatFecha(exp.fecha_fin_evento) : "";
+    exp.fecha_fin_evento ? formatFecha(exp.fecha_fin_evento) : "";
   document.getElementById("campo-tecnico").value = exp.tecnico_asignado_id || "";
   document.getElementById("campo-juridico").value = exp.juridico_asignado_id || "";
 }
@@ -729,24 +837,17 @@ async function gardarCambios(ev) {
     juridico_asignado_id: document.getElementById("campo-juridico").value || null,
   };
 
-  try {
-    await apiFetch(`/expedientes/${estadoFicha.id}`, {
-      method: "PATCH",
-      cabeceiras: { "Content-Type": "application/json" },
-      body: JSON.stringify(corpo),
-    });
+  await apiFetch(`/expedientes/${estadoFicha.id}`, {
+    method: "PATCH",
+    body: JSON.stringify(corpo),
+  });
 
-    mensaje.textContent = "Cambios gardados correctamente.";
-    mensaje.className = "mensaje-ok";
-    mensaje.hidden = false;
+  mensaje.textContent = "Cambios gardados correctamente (só nesta sesión de proba, non se conservan).";
+  mensaje.className = "mensaje-ok";
+  mensaje.hidden = false;
 
-    await cargarExpediente();
-    await cargarHistorico();
-  } catch (e) {
-    mensaje.textContent = `Erro: ${e.message}`;
-    mensaje.className = "mensaje-error";
-    mensaje.hidden = false;
-  }
+  await cargarExpediente();
+  await cargarHistorico();
 }
 
 /* ==================== Arranque ==================== */
