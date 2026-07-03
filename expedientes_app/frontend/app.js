@@ -86,18 +86,65 @@ async function apiFetch(ruta, opcions = {}) {
 
 /* ---------- Utilidades ---------- */
 
-function formatFecha(valor) {
-  if (!valor) return "—";
-  const data = new Date(valor + "T00:00:00");
-  if (Number.isNaN(data.getTime())) return valor;
-  return data.toLocaleDateString("gl-ES");
+function pad2(numero) {
+  return String(numero).padStart(2, "0");
 }
 
-function formatFechaHora(valor) {
-  if (!valor) return "—";
-  const data = new Date(valor);
-  if (Number.isNaN(data.getTime())) return valor;
-  return data.toLocaleString("gl-ES");
+// Formatea unha data ISO (yyyy-mm-dd) como dd/mm/yyyy, sen depender do
+// idioma configurado no navegador.
+function formatFecha(valorIso) {
+  if (!valorIso) return "—";
+  const partes = valorIso.split("T")[0].split("-");
+  if (partes.length !== 3) return valorIso;
+  const [anio, mes, dia] = partes;
+  return `${dia}/${mes}/${anio}`;
+}
+
+function formatFechaHora(valorIso) {
+  if (!valorIso) return "—";
+  const data = new Date(valorIso);
+  if (Number.isNaN(data.getTime())) return valorIso;
+  const dia = pad2(data.getDate());
+  const mes = pad2(data.getMonth() + 1);
+  const anio = data.getFullYear();
+  const horas = pad2(data.getHours());
+  const minutos = pad2(data.getMinutes());
+  return `${dia}/${mes}/${anio} ${horas}:${minutos}`;
+}
+
+// Convirte un texto "dd/mm/yyyy" introducido a man en "yyyy-mm-dd" para a API.
+// Devolve null se o campo está baleiro, undefined se o formato non é válido.
+function parseFechaInput(texto) {
+  if (!texto || !texto.trim()) return null;
+  const coincidencia = texto.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!coincidencia) return undefined;
+
+  const [, diaTxt, mesTxt, anioTxt] = coincidencia;
+  const dia = Number(diaTxt);
+  const mes = Number(mesTxt);
+  const anio = Number(anioTxt);
+  const data = new Date(anio, mes - 1, dia);
+
+  if (data.getFullYear() !== anio || data.getMonth() !== mes - 1 || data.getDate() !== dia) {
+    return undefined;
+  }
+
+  return `${anioTxt}-${mesTxt}-${diaTxt}`;
+}
+
+// Insire as barras automaticamente mentres se escribe nun campo de data en
+// formato dd/mm/yyyy.
+function activarAutoFormatoData(input) {
+  input.addEventListener("input", () => {
+    const soDixitos = input.value.replace(/\D/g, "").slice(0, 8);
+    let resultado = soDixitos;
+    if (soDixitos.length > 4) {
+      resultado = `${soDixitos.slice(0, 2)}/${soDixitos.slice(2, 4)}/${soDixitos.slice(4)}`;
+    } else if (soDixitos.length > 2) {
+      resultado = `${soDixitos.slice(0, 2)}/${soDixitos.slice(2)}`;
+    }
+    input.value = resultado;
+  });
 }
 
 function escapeHtml(texto) {
@@ -154,6 +201,7 @@ function initLogin() {
 
 const estadoPanel = {
   expedientes: [],
+  agenda: [],
   usuarios: {},
   usuarioActual: null,
   vista: "kanban",
@@ -251,26 +299,68 @@ async function cargarExpedientes() {
 
 async function cargarAgenda() {
   const eventos = await apiFetch("/agenda");
+  estadoPanel.agenda = eventos;
+
   const banda = document.getElementById("banda-agenda");
   banda.innerHTML = "";
 
   if (eventos.length === 0) {
     banda.innerHTML = '<p class="sen-eventos">Non hai eventos programados nos vindeiros 90 días.</p>';
-    return;
+  } else {
+    eventos.forEach((exp) => {
+      const tarxeta = document.createElement("div");
+      tarxeta.className = "tarxeta-axenda" + (exp.incompleto ? " incompleto" : "");
+      tarxeta.innerHTML = `
+        <div class="data">${formatFecha(exp.fecha_inicio_evento)}</div>
+        <div class="numero">${escapeHtml(exp.expediente)}</div>
+        <div class="asunto-corto">${escapeHtml((exp.asunto || "").slice(0, 40))}</div>
+      `;
+      tarxeta.addEventListener("click", () => {
+        window.location.href = `expediente.html?id=${exp.id}`;
+      });
+      banda.appendChild(tarxeta);
+    });
   }
 
-  eventos.forEach((exp) => {
-    const tarxeta = document.createElement("div");
-    tarxeta.className = "tarxeta-axenda" + (exp.incompleto ? " incompleto" : "");
-    tarxeta.innerHTML = `
-      <div class="data">${formatFecha(exp.fecha_inicio_evento)}</div>
-      <div class="numero">${escapeHtml(exp.expediente)}</div>
-      <div class="asunto-corto">${escapeHtml((exp.asunto || "").slice(0, 40))}</div>
-    `;
-    tarxeta.addEventListener("click", () => {
-      window.location.href = `expediente.html?id=${exp.id}`;
+  renderizarProximosKanban();
+}
+
+function eventosEnProximosDias(dias) {
+  const hoxe = new Date();
+  hoxe.setHours(0, 0, 0, 0);
+  const limite = new Date(hoxe);
+  limite.setDate(limite.getDate() + dias);
+
+  return estadoPanel.agenda.filter((exp) => {
+    if (!exp.fecha_inicio_evento) return false;
+    const data = new Date(exp.fecha_inicio_evento + "T00:00:00");
+    return data >= hoxe && data <= limite;
+  });
+}
+
+function renderizarProximosKanban() {
+  [7, 15, 30].forEach((dias) => {
+    const lista = document.getElementById(`resumo-proximos-${dias}`);
+    const titulo = document.getElementById(`titulo-proximos-${dias}`);
+    if (!lista) return;
+
+    const eventos = eventosEnProximosDias(dias);
+    if (titulo) titulo.textContent = `Próximos ${dias} días (${eventos.length})`;
+
+    lista.innerHTML = "";
+    if (eventos.length === 0) {
+      lista.innerHTML = `<li>Non hai eventos nos vindeiros ${dias} días</li>`;
+      return;
+    }
+
+    eventos.forEach((exp) => {
+      const item = document.createElement("li");
+      item.innerHTML = `<span>${escapeHtml(exp.expediente)}</span><span>${formatFecha(exp.fecha_inicio_evento)}</span>`;
+      item.addEventListener("click", () => {
+        window.location.href = `expediente.html?id=${exp.id}`;
+      });
+      lista.appendChild(item);
     });
-    banda.appendChild(tarxeta);
   });
 }
 
@@ -525,6 +615,8 @@ async function initExpediente() {
   popularSelectorDocumentacion();
   popularSelectorUsuarios("campo-tecnico", "tecnico");
   popularSelectorUsuarios("campo-juridico", "juridico");
+  activarAutoFormatoData(document.getElementById("campo-fecha-inicio"));
+  activarAutoFormatoData(document.getElementById("campo-fecha-fin"));
 
   await cargarExpediente();
   await cargarHistorico();
@@ -575,8 +667,10 @@ async function cargarExpediente() {
 
   document.getElementById("campo-fase").value = exp.fase;
   document.getElementById("campo-documentacion").value = exp.documentacion_pendiente;
-  document.getElementById("campo-fecha-inicio").value = exp.fecha_inicio_evento || "";
-  document.getElementById("campo-fecha-fin").value = exp.fecha_fin_evento || "";
+  document.getElementById("campo-fecha-inicio").value =
+    exp.fecha_inicio_evento && exp.fecha_inicio_evento !== "—" ? formatFecha(exp.fecha_inicio_evento) : "";
+  document.getElementById("campo-fecha-fin").value =
+    exp.fecha_fin_evento && exp.fecha_fin_evento !== "—" ? formatFecha(exp.fecha_fin_evento) : "";
   document.getElementById("campo-tecnico").value = exp.tecnico_asignado_id || "";
   document.getElementById("campo-juridico").value = exp.juridico_asignado_id || "";
 }
@@ -616,11 +710,21 @@ async function gardarCambios(ev) {
   const mensaje = document.getElementById("mensaje-gardado");
   mensaje.hidden = true;
 
+  const fechaInicio = parseFechaInput(document.getElementById("campo-fecha-inicio").value);
+  const fechaFin = parseFechaInput(document.getElementById("campo-fecha-fin").value);
+
+  if (fechaInicio === undefined || fechaFin === undefined) {
+    mensaje.textContent = "Formato de data non válido. Usa dd/mm/aaaa.";
+    mensaje.className = "mensaje-error";
+    mensaje.hidden = false;
+    return;
+  }
+
   const corpo = {
     fase: document.getElementById("campo-fase").value,
     documentacion_pendiente: document.getElementById("campo-documentacion").value,
-    fecha_inicio_evento: document.getElementById("campo-fecha-inicio").value || null,
-    fecha_fin_evento: document.getElementById("campo-fecha-fin").value || null,
+    fecha_inicio_evento: fechaInicio,
+    fecha_fin_evento: fechaFin,
     tecnico_asignado_id: document.getElementById("campo-tecnico").value || null,
     juridico_asignado_id: document.getElementById("campo-juridico").value || null,
   };
@@ -633,12 +737,14 @@ async function gardarCambios(ev) {
     });
 
     mensaje.textContent = "Cambios gardados correctamente.";
+    mensaje.className = "mensaje-ok";
     mensaje.hidden = false;
 
     await cargarExpediente();
     await cargarHistorico();
   } catch (e) {
     mensaje.textContent = `Erro: ${e.message}`;
+    mensaje.className = "mensaje-error";
     mensaje.hidden = false;
   }
 }

@@ -38,7 +38,21 @@
 
   <main id="vista-kanban" class="vista">
     <div id="banda-agenda" class="banda-agenda"></div>
-    <div id="taboleiro-kanban" class="taboleiro-kanban"></div>
+    <div class="corpo-kanban">
+      <div id="taboleiro-kanban" class="taboleiro-kanban"></div>
+      <aside class="panel-lateral panel-lateral-kanban">
+        <h2>Próximos eventos</h2>
+
+        <h3 id="titulo-proximos-7">Próximos 7 días</h3>
+        <ul id="resumo-proximos-7"></ul>
+
+        <h3 id="titulo-proximos-15">Próximos 15 días</h3>
+        <ul id="resumo-proximos-15"></ul>
+
+        <h3 id="titulo-proximos-30">Próximos 30 días</h3>
+        <ul id="resumo-proximos-30"></ul>
+      </aside>
+    </div>
   </main>
 
   <main id="vista-tabla" class="vista" hidden>
