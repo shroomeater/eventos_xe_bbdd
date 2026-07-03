@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="gl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panel — Control de expedientes</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="panel">
+  <header class="cabeceira">
+    <h1>Control de expedientes</h1>
+    <div class="cabeceira-dereita">
+      <span id="usuario-actual"></span>
+      <button id="btn-logout" class="boton-secundario">Saír</button>
+    </div>
+  </header>
+
+  <section class="barra-ferramentas">
+    <div class="grupo-vista">
+      <button id="btn-vista-kanban" class="boton-vista activo" data-vista="kanban">Kanban</button>
+      <button id="btn-vista-tabla" class="boton-vista" data-vista="tabla">Táboa</button>
+    </div>
+
+    <div class="grupo-filtros">
+      <select id="filtro-rapido">
+        <option value="todos">Todos</option>
+        <option value="mios">Os meus expedientes</option>
+        <option value="incompletos">Incompletos</option>
+        <option value="doc-pendente">Con doc. pendente</option>
+      </select>
+      <input type="search" id="buscador" placeholder="Buscar por nº de expediente ou asunto...">
+    </div>
+
+    <div class="grupo-acciones">
+      <button id="btn-importar" class="boton-primario">Importar CSV</button>
+    </div>
+  </section>
+
+  <main id="vista-kanban" class="vista">
+    <div id="banda-agenda" class="banda-agenda"></div>
+    <div class="corpo-kanban">
+      <div id="taboleiro-kanban" class="taboleiro-kanban"></div>
+      <aside class="panel-lateral panel-lateral-kanban">
+        <h2>Próximos eventos</h2>
+
+        <h3 id="titulo-proximos-7">Próximos 7 días</h3>
+        <ul id="resumo-proximos-7"></ul>
+
+        <h3 id="titulo-proximos-15">Próximos 15 días</h3>
+        <ul id="resumo-proximos-15"></ul>
+
+        <h3 id="titulo-proximos-30">Próximos 30 días</h3>
+        <ul id="resumo-proximos-30"></ul>
+      </aside>
+    </div>
+  </main>
+
+  <main id="vista-tabla" class="vista" hidden>
+    <div class="contedor-tabla">
+      <table id="tabla-expedientes">
+        <thead>
+          <tr>
+            <th data-orden="fecha_inicio_evento">Data evento</th>
+            <th data-orden="expediente">Expediente</th>
+            <th data-orden="asunto">Asunto</th>
+            <th data-orden="fase">Fase</th>
+            <th data-orden="documentacion_pendiente">Doc. pendente</th>
+            <th data-orden="tecnico">Técnico</th>
+            <th data-orden="juridico">Xurídico</th>
+          </tr>
+        </thead>
+        <tbody id="corpo-tabla"></tbody>
+      </table>
+    </div>
+    <aside class="panel-lateral">
+      <h2>Resumo por fase</h2>
+      <ul id="resumo-fases"></ul>
+      <h2>Próximos 7 días</h2>
+      <ul id="resumo-proximos"></ul>
+    </aside>
+  </main>
+
+  <div id="modal-importar" class="modal" hidden>
+    <div class="modal-contido">
+      <h2>Importar CSV</h2>
+      <input type="file" id="ficheiro-csv" accept=".csv">
+      <div class="modal-accions">
+        <button id="btn-cancelar-importar" class="boton-secundario">Cancelar</button>
+        <button id="btn-confirmar-importar" class="boton-primario">Importar</button>
+      </div>
+      <div id="resultado-importacion"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
