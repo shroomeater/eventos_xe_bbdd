@@ -1,0 +1,653 @@
+"use strict";
+
+/* ---------- Constantes compartidas ---------- */
+
+const FASES = [
+  { valor: "Sin revisar", etiqueta: "Sen revisar" },
+  { valor: "Revisado administrativamente", etiqueta: "Revisado administrativamente" },
+  { valor: "Pendiente revision tecnica", etiqueta: "Pendente de revisión técnica" },
+  { valor: "Revision tecnica favorable", etiqueta: "Revisión técnica favorable" },
+  { valor: "Pendiente revision juridica", etiqueta: "Pendente de revisión xurídica" },
+  { valor: "Revision juridica favorable", etiqueta: "Revisión xurídica favorable" },
+  { valor: "Preparada resolucion", etiqueta: "Preparada resolución" },
+  { valor: "Comunicada", etiqueta: "Comunicada" },
+  { valor: "Expediente cerrado", etiqueta: "Expediente pechado" },
+];
+
+const DOCUMENTACION = [
+  { valor: "No procede", etiqueta: "Non procede" },
+  { valor: "Requerida documentacion administrativa", etiqueta: "Requirida documentación administrativa" },
+  { valor: "Requerida documentacion tecnica", etiqueta: "Requirida documentación técnica" },
+  { valor: "Requerida documentacion juridica", etiqueta: "Requirida documentación xurídica" },
+  { valor: "Documentacion recibida pendiente revisar", etiqueta: "Documentación recibida, pendente de revisar" },
+];
+
+function etiquetaFase(valor) {
+  const fase = FASES.find((f) => f.valor === valor);
+  return fase ? fase.etiqueta : valor;
+}
+
+function etiquetaDocumentacion(valor) {
+  const doc = DOCUMENTACION.find((d) => d.valor === valor);
+  return doc ? doc.etiqueta : valor;
+}
+
+/* ---------- Autenticación / peticións á API ---------- */
+
+function getToken() {
+  return sessionStorage.getItem("token");
+}
+
+function setToken(token) {
+  sessionStorage.setItem("token", token);
+}
+
+function clearToken() {
+  sessionStorage.removeItem("token");
+}
+
+function requireAuth() {
+  if (!getToken()) {
+    window.location.href = "index.html";
+  }
+}
+
+async function apiFetch(ruta, opcions = {}) {
+  const cabeceiras = opcions.cabeceiras || {};
+  const token = getToken();
+  if (token) {
+    cabeceiras["Authorization"] = `Bearer ${token}`;
+  }
+
+  const resposta = await fetch(ruta, { ...opcions, headers: cabeceiras });
+
+  if (resposta.status === 401) {
+    clearToken();
+    window.location.href = "index.html";
+    throw new Error("Non autorizado");
+  }
+
+  if (!resposta.ok) {
+    let detalle = "Erro na petición";
+    try {
+      const corpo = await resposta.json();
+      detalle = corpo.detail || detalle;
+    } catch (e) {
+      /* resposta sen corpo JSON */
+    }
+    throw new Error(typeof detalle === "string" ? detalle : JSON.stringify(detalle));
+  }
+
+  if (resposta.status === 204) {
+    return null;
+  }
+  return resposta.json();
+}
+
+/* ---------- Utilidades ---------- */
+
+function formatFecha(valor) {
+  if (!valor) return "—";
+  const data = new Date(valor + "T00:00:00");
+  if (Number.isNaN(data.getTime())) return valor;
+  return data.toLocaleDateString("gl-ES");
+}
+
+function formatFechaHora(valor) {
+  if (!valor) return "—";
+  const data = new Date(valor);
+  if (Number.isNaN(data.getTime())) return valor;
+  return data.toLocaleString("gl-ES");
+}
+
+function escapeHtml(texto) {
+  if (texto === null || texto === undefined) return "";
+  const div = document.createElement("div");
+  div.textContent = texto;
+  return div.innerHTML;
+}
+
+function parametroUrl(nome) {
+  return new URLSearchParams(window.location.search).get(nome);
+}
+
+/* ==================== Páxina: Login ==================== */
+
+function initLogin() {
+  if (getToken()) {
+    window.location.href = "panel.html";
+    return;
+  }
+
+  const form = document.getElementById("form-login");
+  const erro = document.getElementById("error-login");
+
+  form.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    erro.hidden = true;
+
+    const email = document.getElementById("email").value;
+    const password = document.getElementById("password").value;
+
+    try {
+      const resposta = await fetch("/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!resposta.ok) {
+        throw new Error("Email ou contrasinal incorrectos");
+      }
+
+      const datos = await resposta.json();
+      setToken(datos.access_token);
+      window.location.href = "panel.html";
+    } catch (e) {
+      erro.textContent = e.message;
+      erro.hidden = false;
+    }
+  });
+}
+
+/* ==================== Páxina: Panel ==================== */
+
+const estadoPanel = {
+  expedientes: [],
+  usuarios: {},
+  usuarioActual: null,
+  vista: "kanban",
+  filtroRapido: "todos",
+  texto: "",
+  ordeCol: "fecha_inicio_evento",
+  ordeAsc: true,
+};
+
+function nomeUsuario(id) {
+  const usuario = estadoPanel.usuarios[id];
+  return usuario ? usuario.nombre : "—";
+}
+
+async function initPanel() {
+  requireAuth();
+
+  document.getElementById("btn-logout").addEventListener("click", () => {
+    clearToken();
+    window.location.href = "index.html";
+  });
+
+  try {
+    estadoPanel.usuarioActual = await apiFetch("/auth/me");
+    document.getElementById("usuario-actual").textContent = estadoPanel.usuarioActual.nombre;
+  } catch (e) {
+    return;
+  }
+
+  const usuarios = await apiFetch("/usuarios");
+  usuarios.forEach((u) => {
+    estadoPanel.usuarios[u.id] = u;
+  });
+
+  estadoPanel.vista = localStorage.getItem("vista_preferida") || "kanban";
+  activarVista(estadoPanel.vista, false);
+
+  configurarControis();
+  await cargarExpedientes();
+}
+
+function configurarControis() {
+  document.getElementById("btn-vista-kanban").addEventListener("click", () => activarVista("kanban"));
+  document.getElementById("btn-vista-tabla").addEventListener("click", () => activarVista("tabla"));
+
+  document.getElementById("filtro-rapido").addEventListener("change", (ev) => {
+    estadoPanel.filtroRapido = ev.target.value;
+    renderizarVista();
+  });
+
+  let temporizador;
+  document.getElementById("buscador").addEventListener("input", (ev) => {
+    clearTimeout(temporizador);
+    temporizador = setTimeout(() => {
+      estadoPanel.texto = ev.target.value.trim().toLowerCase();
+      renderizarVista();
+    }, 200);
+  });
+
+  document.querySelectorAll("#tabla-expedientes th[data-orden]").forEach((th) => {
+    th.addEventListener("click", () => {
+      const columna = th.dataset.orden;
+      if (estadoPanel.ordeCol === columna) {
+        estadoPanel.ordeAsc = !estadoPanel.ordeAsc;
+      } else {
+        estadoPanel.ordeCol = columna;
+        estadoPanel.ordeAsc = true;
+      }
+      renderizarTabla();
+    });
+  });
+
+  document.getElementById("btn-importar").addEventListener("click", abrirModalImportar);
+  document.getElementById("btn-cancelar-importar").addEventListener("click", pecharModalImportar);
+  document.getElementById("btn-confirmar-importar").addEventListener("click", confirmarImportacion);
+}
+
+function activarVista(vista, gardar = true) {
+  estadoPanel.vista = vista;
+  if (gardar) localStorage.setItem("vista_preferida", vista);
+
+  document.getElementById("vista-kanban").hidden = vista !== "kanban";
+  document.getElementById("vista-tabla").hidden = vista !== "tabla";
+  document.getElementById("btn-vista-kanban").classList.toggle("activo", vista === "kanban");
+  document.getElementById("btn-vista-tabla").classList.toggle("activo", vista === "tabla");
+
+  renderizarVista();
+}
+
+async function cargarExpedientes() {
+  estadoPanel.expedientes = await apiFetch("/expedientes?limit=500");
+  renderizarVista();
+  cargarAgenda();
+}
+
+async function cargarAgenda() {
+  const eventos = await apiFetch("/agenda");
+  const banda = document.getElementById("banda-agenda");
+  banda.innerHTML = "";
+
+  if (eventos.length === 0) {
+    banda.innerHTML = '<p class="sen-eventos">Non hai eventos programados nos vindeiros 90 días.</p>';
+    return;
+  }
+
+  eventos.forEach((exp) => {
+    const tarxeta = document.createElement("div");
+    tarxeta.className = "tarxeta-axenda" + (exp.incompleto ? " incompleto" : "");
+    tarxeta.innerHTML = `
+      <div class="data">${formatFecha(exp.fecha_inicio_evento)}</div>
+      <div class="numero">${escapeHtml(exp.expediente)}</div>
+      <div class="asunto-corto">${escapeHtml((exp.asunto || "").slice(0, 40))}</div>
+    `;
+    tarxeta.addEventListener("click", () => {
+      window.location.href = `expediente.html?id=${exp.id}`;
+    });
+    banda.appendChild(tarxeta);
+  });
+}
+
+function expedientesFiltrados() {
+  let lista = estadoPanel.expedientes;
+
+  if (estadoPanel.filtroRapido === "mios") {
+    const id = estadoPanel.usuarioActual.id;
+    lista = lista.filter((e) => e.tecnico_asignado_id === id || e.juridico_asignado_id === id);
+  } else if (estadoPanel.filtroRapido === "incompletos") {
+    lista = lista.filter((e) => e.incompleto);
+  } else if (estadoPanel.filtroRapido === "doc-pendente") {
+    lista = lista.filter((e) => e.documentacion_pendiente !== "No procede");
+  }
+
+  if (estadoPanel.texto) {
+    lista = lista.filter(
+      (e) =>
+        e.expediente.toLowerCase().includes(estadoPanel.texto) ||
+        (e.asunto || "").toLowerCase().includes(estadoPanel.texto)
+    );
+  }
+
+  return lista;
+}
+
+function renderizarVista() {
+  if (estadoPanel.vista === "kanban") {
+    renderizarKanban();
+  } else {
+    renderizarTabla();
+  }
+}
+
+function ordenarPorDataEvento(lista) {
+  return [...lista].sort((a, b) => {
+    if (!a.fecha_inicio_evento && !b.fecha_inicio_evento) return 0;
+    if (!a.fecha_inicio_evento) return -1;
+    if (!b.fecha_inicio_evento) return 1;
+    return a.fecha_inicio_evento.localeCompare(b.fecha_inicio_evento);
+  });
+}
+
+function renderizarKanban() {
+  const taboleiro = document.getElementById("taboleiro-kanban");
+  taboleiro.innerHTML = "";
+  const lista = expedientesFiltrados();
+
+  FASES.forEach((fase) => {
+    const expedientesFase = ordenarPorDataEvento(lista.filter((e) => e.fase === fase.valor));
+
+    const columna = document.createElement("div");
+    columna.className = "columna-kanban";
+    columna.innerHTML = `<h3>${fase.etiqueta} (${expedientesFase.length})</h3>`;
+
+    expedientesFase.forEach((exp) => {
+      columna.appendChild(tarxetaExpediente(exp));
+    });
+
+    taboleiro.appendChild(columna);
+  });
+}
+
+function tarxetaExpediente(exp) {
+  const tarxeta = document.createElement("div");
+  tarxeta.className = "tarxeta-expediente" + (!exp.fecha_inicio_evento ? " sen-data" : "");
+  tarxeta.innerHTML = `
+    <div class="numero">${escapeHtml(exp.expediente)}</div>
+    <div class="asunto">${escapeHtml(exp.asunto || "")}</div>
+    <div>
+      <span class="badge">${escapeHtml(etiquetaDocumentacion(exp.documentacion_pendiente))}</span>
+      ${exp.incompleto ? '<span class="badge incompleto">Incompleto</span>' : ""}
+    </div>
+    <div class="asignados">
+      Técnico: ${escapeHtml(nomeUsuario(exp.tecnico_asignado_id))} ·
+      Xurídico: ${escapeHtml(nomeUsuario(exp.juridico_asignado_id))}
+    </div>
+  `;
+  tarxeta.addEventListener("click", () => {
+    window.location.href = `expediente.html?id=${exp.id}`;
+  });
+  return tarxeta;
+}
+
+function renderizarTabla() {
+  const corpo = document.getElementById("corpo-tabla");
+  corpo.innerHTML = "";
+  let lista = expedientesFiltrados();
+
+  const columna = estadoPanel.ordeCol;
+  lista = [...lista].sort((a, b) => {
+    let valorA = a[columna];
+    let valorB = b[columna];
+
+    if (columna === "tecnico") {
+      valorA = nomeUsuario(a.tecnico_asignado_id);
+      valorB = nomeUsuario(b.tecnico_asignado_id);
+    } else if (columna === "juridico") {
+      valorA = nomeUsuario(a.juridico_asignado_id);
+      valorB = nomeUsuario(b.juridico_asignado_id);
+    }
+
+    if (!valorA && !valorB) return 0;
+    if (!valorA) return -1;
+    if (!valorB) return 1;
+
+    const comparacion = String(valorA).localeCompare(String(valorB));
+    return estadoPanel.ordeAsc ? comparacion : -comparacion;
+  });
+
+  lista.forEach((exp) => {
+    const fila = document.createElement("tr");
+    fila.className = !exp.fecha_inicio_evento ? "sen-data" : "";
+    fila.innerHTML = `
+      <td>${formatFecha(exp.fecha_inicio_evento)}</td>
+      <td>${escapeHtml(exp.expediente)}</td>
+      <td class="celda-asunto" title="${escapeHtml(exp.asunto || "")}">${escapeHtml(exp.asunto || "")}</td>
+      <td>${escapeHtml(etiquetaFase(exp.fase))}</td>
+      <td>${escapeHtml(etiquetaDocumentacion(exp.documentacion_pendiente))}</td>
+      <td>${escapeHtml(nomeUsuario(exp.tecnico_asignado_id))}</td>
+      <td>${escapeHtml(nomeUsuario(exp.juridico_asignado_id))}</td>
+    `;
+    fila.addEventListener("click", () => {
+      window.location.href = `expediente.html?id=${exp.id}`;
+    });
+    corpo.appendChild(fila);
+  });
+
+  renderizarResumo(expedientesFiltrados());
+}
+
+function renderizarResumo(lista) {
+  const resumoFases = document.getElementById("resumo-fases");
+  resumoFases.innerHTML = "";
+  FASES.forEach((fase) => {
+    const total = lista.filter((e) => e.fase === fase.valor).length;
+    const item = document.createElement("li");
+    item.innerHTML = `<span>${fase.etiqueta}</span><strong>${total}</strong>`;
+    resumoFases.appendChild(item);
+  });
+
+  const hoxe = new Date();
+  hoxe.setHours(0, 0, 0, 0);
+  const en7dias = new Date(hoxe);
+  en7dias.setDate(en7dias.getDate() + 7);
+
+  const proximos = lista.filter((e) => {
+    if (!e.fecha_inicio_evento) return false;
+    const data = new Date(e.fecha_inicio_evento + "T00:00:00");
+    return data >= hoxe && data <= en7dias;
+  });
+
+  const resumoProximos = document.getElementById("resumo-proximos");
+  resumoProximos.innerHTML = "";
+  if (proximos.length === 0) {
+    resumoProximos.innerHTML = "<li>Non hai eventos nos vindeiros 7 días</li>";
+  } else {
+    proximos.forEach((exp) => {
+      const item = document.createElement("li");
+      item.innerHTML = `<span>${escapeHtml(exp.expediente)}</span><span>${formatFecha(exp.fecha_inicio_evento)}</span>`;
+      resumoProximos.appendChild(item);
+    });
+  }
+}
+
+/* ---------- Modal de importación ---------- */
+
+function abrirModalImportar() {
+  document.getElementById("modal-importar").hidden = false;
+  document.getElementById("resultado-importacion").innerHTML = "";
+  document.getElementById("ficheiro-csv").value = "";
+}
+
+function pecharModalImportar() {
+  document.getElementById("modal-importar").hidden = true;
+}
+
+async function confirmarImportacion() {
+  const input = document.getElementById("ficheiro-csv");
+  const resultado = document.getElementById("resultado-importacion");
+
+  if (!input.files.length) {
+    resultado.textContent = "Selecciona un ficheiro CSV.";
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("fichero", input.files[0]);
+
+  resultado.textContent = "Importando...";
+
+  try {
+    const resposta = await fetch("/importar-csv", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${getToken()}` },
+      body: formData,
+    });
+
+    if (!resposta.ok) {
+      const corpo = await resposta.json();
+      throw new Error(corpo.detail || "Erro na importación");
+    }
+
+    const resumo = await resposta.json();
+    let html = `<p>Novos: ${resumo.nuevos} · Actualizados: ${resumo.actualizados}</p>`;
+    if (resumo.errores.length) {
+      html += `<p>Erros (${resumo.errores.length}):</p><ul>`;
+      resumo.errores.forEach((err) => {
+        html += `<li>${escapeHtml(err)}</li>`;
+      });
+      html += "</ul>";
+    }
+    resultado.innerHTML = html;
+
+    await cargarExpedientes();
+  } catch (e) {
+    resultado.textContent = e.message;
+  }
+}
+
+/* ==================== Páxina: Ficha de expediente ==================== */
+
+const estadoFicha = {
+  id: null,
+  expediente: null,
+  usuarios: [],
+};
+
+async function initExpediente() {
+  requireAuth();
+
+  document.getElementById("btn-logout").addEventListener("click", () => {
+    clearToken();
+    window.location.href = "index.html";
+  });
+
+  estadoFicha.id = parametroUrl("id");
+  if (!estadoFicha.id) {
+    window.location.href = "panel.html";
+    return;
+  }
+
+  try {
+    const usuarioActual = await apiFetch("/auth/me");
+    document.getElementById("usuario-actual").textContent = usuarioActual.nombre;
+  } catch (e) {
+    return;
+  }
+
+  estadoFicha.usuarios = await apiFetch("/usuarios");
+  popularSelectorFases();
+  popularSelectorDocumentacion();
+  popularSelectorUsuarios("campo-tecnico", "tecnico");
+  popularSelectorUsuarios("campo-juridico", "juridico");
+
+  await cargarExpediente();
+  await cargarHistorico();
+
+  document.getElementById("form-expediente").addEventListener("submit", gardarCambios);
+}
+
+function popularSelectorFases() {
+  const select = document.getElementById("campo-fase");
+  select.innerHTML = FASES.map((f) => `<option value="${f.valor}">${f.etiqueta}</option>`).join("");
+}
+
+function popularSelectorDocumentacion() {
+  const select = document.getElementById("campo-documentacion");
+  select.innerHTML = DOCUMENTACION.map((d) => `<option value="${d.valor}">${d.etiqueta}</option>`).join("");
+}
+
+function popularSelectorUsuarios(idSelector, rol) {
+  const select = document.getElementById(idSelector);
+  const usuariosRol = estadoFicha.usuarios.filter((u) => u.rol === rol);
+  select.innerHTML =
+    '<option value="">— Sen asignar —</option>' +
+    usuariosRol.map((u) => `<option value="${u.id}">${escapeHtml(u.nombre)}</option>`).join("");
+}
+
+async function cargarExpediente() {
+  const exp = await apiFetch(`/expedientes/${estadoFicha.id}`);
+  estadoFicha.expediente = exp;
+
+  document.getElementById("titulo-expediente").textContent = exp.expediente;
+  document.title = `Expediente ${exp.expediente} — Control de expedientes`;
+  document.getElementById("dato-interesado").textContent = exp.interesado || "—";
+  document.getElementById("dato-asunto").textContent = exp.asunto || "—";
+  document.getElementById("dato-ubicacion").textContent = exp.ubicacion || "—";
+  document.getElementById("dato-fecha-expediente").textContent = formatFecha(exp.fecha_expediente);
+  document.getElementById("dato-estado-origen").textContent = exp.estado_origen || "—";
+  document.getElementById("dato-situacion").textContent = exp.situacion_abierto ? "Aberto" : "Pechado";
+  document.getElementById("dato-fecha-creacion").textContent = formatFechaHora(exp.fecha_creacion);
+
+  const alerta = document.getElementById("alerta-incompleto");
+  if (exp.incompleto) {
+    alerta.hidden = false;
+    alerta.textContent =
+      "Este expediente non ten datas de evento e leva máis de 3 días hábiles pendente. Revisa a documentación.";
+  } else {
+    alerta.hidden = true;
+  }
+
+  document.getElementById("campo-fase").value = exp.fase;
+  document.getElementById("campo-documentacion").value = exp.documentacion_pendiente;
+  document.getElementById("campo-fecha-inicio").value = exp.fecha_inicio_evento || "";
+  document.getElementById("campo-fecha-fin").value = exp.fecha_fin_evento || "";
+  document.getElementById("campo-tecnico").value = exp.tecnico_asignado_id || "";
+  document.getElementById("campo-juridico").value = exp.juridico_asignado_id || "";
+}
+
+async function cargarHistorico() {
+  const historico = await apiFetch(`/expedientes/${estadoFicha.id}/historico`);
+  const lista = document.getElementById("lista-historico");
+  lista.innerHTML = "";
+
+  if (historico.length === 0) {
+    lista.innerHTML = "<li>Sen cambios rexistrados.</li>";
+    return;
+  }
+
+  historico.forEach((cambio) => {
+    const item = document.createElement("li");
+    const partes = [];
+    if (cambio.fase_nueva) {
+      partes.push(`Fase: ${etiquetaFase(cambio.fase_anterior) || "—"} → ${etiquetaFase(cambio.fase_nueva)}`);
+    }
+    if (cambio.documentacion_nueva) {
+      partes.push(
+        `Documentación: ${etiquetaDocumentacion(cambio.documentacion_anterior) || "—"} → ${etiquetaDocumentacion(cambio.documentacion_nueva)}`
+      );
+    }
+    const autor = cambio.usuario ? cambio.usuario.nombre : "—";
+    item.innerHTML = `
+      <div>${partes.join(" · ")}</div>
+      <div class="fecha-cambio">${formatFechaHora(cambio.fecha_cambio)} · ${escapeHtml(autor)}</div>
+    `;
+    lista.appendChild(item);
+  });
+}
+
+async function gardarCambios(ev) {
+  ev.preventDefault();
+  const mensaje = document.getElementById("mensaje-gardado");
+  mensaje.hidden = true;
+
+  const corpo = {
+    fase: document.getElementById("campo-fase").value,
+    documentacion_pendiente: document.getElementById("campo-documentacion").value,
+    fecha_inicio_evento: document.getElementById("campo-fecha-inicio").value || null,
+    fecha_fin_evento: document.getElementById("campo-fecha-fin").value || null,
+    tecnico_asignado_id: document.getElementById("campo-tecnico").value || null,
+    juridico_asignado_id: document.getElementById("campo-juridico").value || null,
+  };
+
+  try {
+    await apiFetch(`/expedientes/${estadoFicha.id}`, {
+      method: "PATCH",
+      cabeceiras: { "Content-Type": "application/json" },
+      body: JSON.stringify(corpo),
+    });
+
+    mensaje.textContent = "Cambios gardados correctamente.";
+    mensaje.hidden = false;
+
+    await cargarExpediente();
+    await cargarHistorico();
+  } catch (e) {
+    mensaje.textContent = `Erro: ${e.message}`;
+    mensaje.hidden = false;
+  }
+}
+
+/* ==================== Arranque ==================== */
+
+document.addEventListener("DOMContentLoaded", () => {
+  const pagina = document.body.dataset.page;
+  if (pagina === "login") initLogin();
+  else if (pagina === "panel") initPanel();
+  else if (pagina === "expediente") initExpediente();
+});

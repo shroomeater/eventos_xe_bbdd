@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="gl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Acceso — Control de expedientes</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="login" class="pantalla-login">
+  <div class="tarjeta-login">
+    <h1>Control de expedientes</h1>
+    <p class="subtitulo">Servizo de Espectáculos Públicos · Concello de Vigo</p>
+    <form id="form-login">
+      <label for="email">Email</label>
+      <input type="email" id="email" name="email" required autocomplete="username">
+
+      <label for="password">Contrasinal</label>
+      <input type="password" id="password" name="password" required autocomplete="current-password">
+
+      <button type="submit">Iniciar sesión</button>
+      <p id="error-login" class="mensaje-error" hidden></p>
+    </form>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

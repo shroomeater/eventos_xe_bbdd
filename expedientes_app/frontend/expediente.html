@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="gl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Expediente — Control de expedientes</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="expediente">
+  <header class="cabeceira">
+    <h1><a href="panel.html" class="ligazon-volver">&larr;</a> Ficha de expediente</h1>
+    <div class="cabeceira-dereita">
+      <span id="usuario-actual"></span>
+      <button id="btn-logout" class="boton-secundario">Saír</button>
+    </div>
+  </header>
+
+  <main class="ficha-expediente">
+    <div id="alerta-incompleto" class="alerta-incompleto" hidden></div>
+
+    <section class="datos-expediente">
+      <h2 id="titulo-expediente"></h2>
+      <dl class="lista-datos">
+        <dt>Interesado</dt><dd id="dato-interesado"></dd>
+        <dt>Asunto</dt><dd id="dato-asunto"></dd>
+        <dt>Ubicación</dt><dd id="dato-ubicacion"></dd>
+        <dt>Data expediente</dt><dd id="dato-fecha-expediente"></dd>
+        <dt>Estado orixe</dt><dd id="dato-estado-origen"></dd>
+        <dt>Situación</dt><dd id="dato-situacion"></dd>
+        <dt>Data creación na app</dt><dd id="dato-fecha-creacion"></dd>
+      </dl>
+    </section>
+
+    <section class="edicion-expediente">
+      <h2>Xestión</h2>
+      <form id="form-expediente">
+        <label for="campo-fase">Fase</label>
+        <select id="campo-fase"></select>
+
+        <label for="campo-documentacion">Documentación pendente</label>
+        <select id="campo-documentacion"></select>
+
+        <label for="campo-fecha-inicio">Data inicio evento</label>
+        <input type="date" id="campo-fecha-inicio">
+
+        <label for="campo-fecha-fin">Data fin evento</label>
+        <input type="date" id="campo-fecha-fin">
+
+        <label for="campo-tecnico">Técnico asignado</label>
+        <select id="campo-tecnico"></select>
+
+        <label for="campo-juridico">Xurídico asignado</label>
+        <select id="campo-juridico"></select>
+
+        <button type="submit" class="boton-primario">Gardar cambios</button>
+        <p id="mensaje-gardado" class="mensaje-ok" hidden></p>
+      </form>
+    </section>
+
+    <section class="historico-expediente">
+      <h2>Histórico de cambios</h2>
+      <ul id="lista-historico"></ul>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
