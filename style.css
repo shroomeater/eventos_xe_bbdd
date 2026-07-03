@@ -62,6 +62,35 @@ input, select {
   border-radius: 6px;
 }
 
+/* ---------- Banner de modo demostración ---------- */
+
+body {
+  padding-top: 2.25rem;
+}
+
+.banner-demo {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  background: #3d2c8d;
+  color: #fff;
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  letter-spacing: 0.02em;
+  z-index: 100;
+  box-sizing: border-box;
+}
+
+.nota-demo {
+  color: var(--cor-texto-suave);
+  font-size: 0.75rem;
+  text-align: center;
+  margin: 1rem 0 0;
+}
+
 /* ---------- Login ---------- */
 
 .pantalla-login {
